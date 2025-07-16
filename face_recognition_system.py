@@ -180,6 +180,28 @@ class FaceRecognitionSystem:
         # Extract embeddings
         embeddings = self.extract_embeddings(image, faces)
         
+        def tolist_safe(val):
+            if isinstance(val, np.ndarray):
+                return val.tolist()
+            return val
+        
+        def to_native(val):
+            if isinstance(val, np.generic):
+                return val.item()
+            return val
+        
+        def convert_dict(d):
+            if isinstance(d, dict):
+                return {k: convert_dict(v) for k, v in d.items()}
+            elif isinstance(d, list):
+                return [convert_dict(i) for i in d]
+            elif isinstance(d, np.ndarray):
+                return d.tolist()
+            elif isinstance(d, np.generic):
+                return d.item()
+            else:
+                return d
+        
         results = []
         for i, embedding in enumerate(embeddings):
             # Normalize embedding
@@ -191,38 +213,44 @@ class FaceRecognitionSystem:
                 min(10, self.faiss_index.ntotal)
             )  # type: ignore
             
+            bbox = tolist_safe(getattr(faces[i], 'bbox', None))
+            landmarks = tolist_safe(getattr(faces[i], 'kps', None))
+            
             if len(indices[0]) > 0 and similarities[0][0] > threshold:
-                best_match_id = indices[0][0]
+                best_match_id = to_native(indices[0][0])
                 confidence = float(similarities[0][0])
                 
                 if best_match_id in self.face_database:
                     person_info = self.face_database[best_match_id]
-                    results.append({
-                        'face_index': i,
+                    result = {
+                        'face_index': to_native(i),
                         'person_id': best_match_id,
                         'name': person_info['name'],
                         'confidence': confidence,
-                        'bbox': getattr(faces[i], 'bbox', None),
-                        'landmarks': getattr(faces[i], 'kps', None)
-                    })
+                        'bbox': bbox,
+                        'landmarks': landmarks
+                    }
+                    results.append(convert_dict(result))
                 else:
-                    results.append({
-                        'face_index': i,
+                    result = {
+                        'face_index': to_native(i),
                         'person_id': None,
                         'name': 'Unknown',
                         'confidence': confidence,
-                        'bbox': getattr(faces[i], 'bbox', None),
-                        'landmarks': getattr(faces[i], 'kps', None)
-                    })
+                        'bbox': bbox,
+                        'landmarks': landmarks
+                    }
+                    results.append(convert_dict(result))
             else:
-                results.append({
-                    'face_index': i,
+                result = {
+                    'face_index': to_native(i),
                     'person_id': None,
                     'name': 'Unknown',
                     'confidence': 0.0,
-                    'bbox': getattr(faces[i], 'bbox', None),
-                    'landmarks': getattr(faces[i], 'kps', None)
-                })
+                    'bbox': bbox,
+                    'landmarks': landmarks
+                }
+                results.append(convert_dict(result))
         
         return results
     
